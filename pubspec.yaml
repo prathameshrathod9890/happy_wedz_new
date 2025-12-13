@@ -1,0 +1,60 @@
+name: happy_wedz_vendore_new
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  shared_preferences: ^2.1.1
+  image_picker: ^1.1.1
+  video_player: ^2.7.0
+  youtube_player_flutter: ^9.0.1
+  share_plus: ^10.0.5
+  fl_chart: ^0.69.0
+  lottie: ^3.1.2
+  url_launcher: ^6.3.0
+  http:
+  intl: ^0.20.2
+
+  # Quill Editor
+  flutter_quill: ^11.0.0-dev.15
+  flutter_quill_extensions: ^11.0.0-dev.1
+
+  cupertino_icons: ^1.0.8
+  flutter_launcher_icons: ^0.14.4
+  country_state_city: ^0.1.0
+  html_editor_enhanced: ^2.6.0
+  google_maps_flutter: ^2.14.0
+  flutter_map: ^8.2.2
+  latlong2: ^0.9.0
+  chewie: ^1.7.1
+  table_calendar: ^3.0.9
+  dropdown_search: ^6.0.3
+  video_thumbnail: ^0.5.3
+  path_provider: ^2.0.15
+  provider: ^6.0.5
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/app_icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/images/
