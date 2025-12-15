@@ -355,22 +355,24 @@ class _SocialNetworkPageState extends State<SocialNetworkPage> {
                 ),
               ],
             ),
-
+            const SizedBox(height: 40),
             // SAVE BUTTON
-            ElevatedButton(
-              onPressed: saving ? null : saveLinks,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF00509D),
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            Center(
+              child: ElevatedButton(
+                onPressed: saving ? null : saveLinks,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF00509D),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              child: saving
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text(
-                "Save Links",
-                style: TextStyle(color: Colors.white, fontSize: 16),
+                child: saving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                  "Save Links",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
             ),
           ],
