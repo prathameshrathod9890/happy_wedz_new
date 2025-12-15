@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_services/api_service_vendor.dart';
 
 class PricingPage extends StatefulWidget {
   const PricingPage({super.key});
@@ -14,6 +15,8 @@ class _PricingPageState extends State<PricingPage> {
   final TextEditingController _startingPriceController = TextEditingController();
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
 
   bool loading = true;
   bool saving = false;
@@ -22,6 +25,7 @@ class _PricingPageState extends State<PricingPage> {
   int? serviceId;
   int? vendorSubcategoryId;
   String? token;
+
 
   @override
   void initState() {
@@ -59,47 +63,41 @@ class _PricingPageState extends State<PricingPage> {
   /// Fetch pricing from API
   Future<void> _fetchPricingFromApi() async {
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/vendor/$vendorId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByVendorId(
+        vendorId: vendorId!,
+        token: token!,
       );
 
-      if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
+      if (data == null) return;
 
-        if (data.isNotEmpty) {
-          final service = data[0];
-          serviceId = service['id'];
-          vendorSubcategoryId ??= service['vendor_subcategory_id'];
+      serviceId = data['id'];
+      vendorSubcategoryId ??= data['vendor_subcategory_id'];
 
-          final attrs = service['attributes'] ?? {};
-          final startingPrice = attrs['starting_price']?.toString() ?? '';
-          final priceRange = attrs['PriceRange']?.toString() ?? '';
+      final attrs = Map<String, dynamic>.from(data['attributes'] ?? {});
 
-          String minPrice = '';
-          String maxPrice = '';
-          if (priceRange.contains('-')) {
-            final parts = priceRange.split('-');
-            minPrice = parts[0].trim();
-            maxPrice = parts[1].trim();
-          }
+      final startingPrice = attrs['starting_price']?.toString() ?? '';
+      final priceRange = attrs['PriceRange']?.toString() ?? '';
 
-          setState(() {
-            _startingPriceController.text = startingPrice;
-            _minPriceController.text = minPrice;
-            _maxPriceController.text = maxPrice;
-          });
-
-          // Save locally
-          await _saveLocally();
-        }
-      } else {
-        print("Failed to fetch pricing: ${response.statusCode}");
+      String minPrice = '';
+      String maxPrice = '';
+      if (priceRange.contains('-')) {
+        final parts = priceRange.split('-');
+        minPrice = parts[0].trim();
+        maxPrice = parts[1].trim();
       }
+
+      setState(() {
+        _startingPriceController.text = startingPrice;
+        _minPriceController.text = minPrice;
+        _maxPriceController.text = maxPrice;
+      });
+
+      await _saveLocally();
     } catch (e) {
-      print("Error fetching pricing: $e");
+      debugPrint("❌ Fetch pricing error: $e");
     }
   }
+
 
   /// Save locally in SharedPreferences
   Future<void> _saveLocally() async {
@@ -123,45 +121,49 @@ class _PricingPageState extends State<PricingPage> {
 
     setState(() => saving = true);
 
-    final requestBody = {
+    // 🔥 Fetch latest attributes first (SAFETY)
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?['attributes'] ?? {});
+
+    // ✅ Update ONLY pricing-related fields
+    attributes.addAll({
+      "starting_price": int.tryParse(_startingPriceController.text) ?? 0,
+      "PriceRange":
+      "${_minPriceController.text} - ${_maxPriceController.text}",
+    });
+
+    final body = {
       "vendor_id": vendorId,
       "vendor_subcategory_id": vendorSubcategoryId,
-      "attributes": {
-        "starting_price": int.tryParse(_startingPriceController.text) ?? 0,
-        "PriceRange": "${_minPriceController.text} - ${_maxPriceController.text}",
-      }
+      "attributes": attributes,
     };
 
     await _saveLocally();
 
-    try {
-      final response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(requestBody),
-      );
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: body,
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Pricing saved successfully.")),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to save pricing.")),
-        );
-      }
-    } catch (e) {
-      print("Error saving pricing: $e");
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error saving pricing.")),
+        const SnackBar(content: Text("Pricing saved successfully.")),
       );
-    } finally {
-      setState(() => saving = false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save pricing.")),
+      );
     }
+
+    setState(() => saving = false);
   }
+
 
   @override
   Widget build(BuildContext context) {

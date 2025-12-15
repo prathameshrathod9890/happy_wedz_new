@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import '../api_services/api_service_vendor.dart';
 
 class PromotionsPage extends StatefulWidget {
   const PromotionsPage({super.key});
@@ -23,6 +24,8 @@ class _PromotionsPageState extends State<PromotionsPage> {
   bool _termsAccepted = false;
   DateTime? _startDate;
   DateTime? _endDate;
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
 
   int? vendorId;
   int? serviceId;
@@ -57,35 +60,58 @@ class _PromotionsPageState extends State<PromotionsPage> {
     setState(() => loading = true);
 
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByServiceId(
+        serviceId: serviceId!,
+        token: token!,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final attributes = data['attributes'] ?? {};
-        final deals = attributes['deals'] ?? [];
+      if (data == null) return;
 
-        setState(() {
-          existingPromotions = List<Map<String, dynamic>>.from(deals);
-        });
-      }
-    } catch (_) {}
+      final attributes = Map<String, dynamic>.from(data['attributes'] ?? {});
+      final deals = attributes['deals'] ?? [];
+
+      setState(() {
+        existingPromotions = List<Map<String, dynamic>>.from(deals);
+      });
+    } catch (e) {
+      debugPrint("❌ Fetch promotions error: $e");
+    }
+
     setState(() => loading = false);
   }
 
+
   Future<void> _savePromotion() async {
-    if (vendorId == null || serviceId == null || vendorSubcategoryId == null || token == null) {
+    if (vendorId == null ||
+        serviceId == null ||
+        vendorSubcategoryId == null ||
+        token == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please complete Basic Info first.")),
       );
       return;
     }
 
+    if (!_termsAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please accept terms to continue.")),
+      );
+      return;
+    }
+
     setState(() => saving = true);
 
-    Map<String, dynamic> promotionData = {
+    // 🔥 Fetch latest attributes
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    // Promotion object
+    final promotionData = {
       "title": _offerTitleController.text.trim(),
       "code": _codeController.text.trim(),
       "value": int.tryParse(_valueController.text.trim()),
@@ -95,41 +121,82 @@ class _PromotionsPageState extends State<PromotionsPage> {
       "endDate": _endDate?.toIso8601String(),
     };
 
+    List<Map<String, dynamic>> deals =
+    List<Map<String, dynamic>>.from(attributes["deals"] ?? []);
+
     if (editIndex == null) {
-      existingPromotions.add(promotionData);
+      deals.add(promotionData);
     } else {
-      existingPromotions[editIndex!] = promotionData;
+      deals[editIndex!] = promotionData;
       editIndex = null;
     }
 
-    final requestBody = {
+    // ✅ update only deals
+    attributes["deals"] = deals;
+
+    final body = {
       "vendor_id": vendorId,
       "vendor_subcategory_id": vendorSubcategoryId,
-      "attributes": {
-        "deals": existingPromotions,
-      }
+      "attributes": attributes,
     };
 
-    try {
-      final response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(requestBody),
-      );
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: body,
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Promotion saved successfully.")),
-        );
-      }
-    } catch (_) {}
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Promotion saved successfully")),
+      );
+      setState(() {
+        existingPromotions = deals;
+      });
+      _resetForm();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save promotion")),
+      );
+    }
 
     setState(() => saving = false);
-    _resetForm();
   }
+
+  Future<void> _deletePromotion(int index) async {
+    setState(() => saving = true);
+
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    List<Map<String, dynamic>> deals =
+    List<Map<String, dynamic>>.from(attributes["deals"] ?? []);
+
+    deals.removeAt(index);
+    attributes["deals"] = deals;
+
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: {
+        "vendor_id": vendorId,
+        "vendor_subcategory_id": vendorSubcategoryId,
+        "attributes": attributes,
+      },
+    );
+
+    if (success) {
+      setState(() => existingPromotions = deals);
+    }
+
+    setState(() => saving = false);
+  }
+
 
   void _resetForm() {
     setState(() {
@@ -217,11 +284,13 @@ class _PromotionsPageState extends State<PromotionsPage> {
                         ),
                         IconButton(
                           icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              existingPromotions.removeAt(index);
-                            });
-                          },
+                          // onPressed: () {
+                          //   setState(() {
+                          //     existingPromotions.removeAt(index);
+                          //   });
+                          // },
+                          onPressed: () => _deletePromotion(index),
+
                         ),
                       ],
                     ),

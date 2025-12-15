@@ -26,7 +26,7 @@ import 'PoliciesPage.dart';
 import 'PrefferedVendiors.dart';
 import 'PricingPage.dart';
 import 'PromotionsPage.dart';
-import 'SlotsPage.dart';
+import 'Availability&SlotsPage.dart';
 import 'SocialNetwork.dart';
 import 'VediosScreen.dart';
 import 'package:shared_preferences/shared_preferences.dart';

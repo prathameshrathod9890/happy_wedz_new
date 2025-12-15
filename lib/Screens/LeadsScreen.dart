@@ -2,9 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../chat_screen/chat_screenn.dart';
 import 'new_screens/leaddetails_screen.dart';
-
 
 class LeadsPage extends StatefulWidget {
   const LeadsPage({super.key});
@@ -23,6 +21,13 @@ class _LeadsPageState extends State<LeadsPage> {
   bool _isLoading = true;
   List<dynamic> _leads = [];
 
+  /// 🔥 IMPORTANT: archived IDs (persisted)
+  Set<String> _archivedLeadIds = {};
+  /// 🔥 opened (only UI, no need to persist)
+  Set<String> _openedLeadIds = {};
+
+  Map<String, String> _conversationMap = {};
+
   final List<String> _filters = [
     'All Enquiries',
     'Unread',
@@ -32,49 +37,110 @@ class _LeadsPageState extends State<LeadsPage> {
     'Declined',
   ];
 
-  Set<String> _openedLeadIds = {};
-  Set<String> _archivedLeadIds = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchLeads();
+    _loadArchivedLeads();
+    _loadInitialData();
+   // _fetchLeads();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+
+    await Future.wait([
+      _fetchLeads(),
+      _fetchConversations(),
+    ]);
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadArchivedLeads() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('archived_leads') ?? [];
+    setState(() {
+      _archivedLeadIds = saved.toSet();
+    });
+  }
+
+  Future<void> _toggleArchive(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      if (_archivedLeadIds.contains(id)) {
+        _archivedLeadIds.remove(id);
+      } else {
+        _archivedLeadIds.add(id);
+      }
+    });
+
+    await prefs.setStringList(
+      'archived_leads',
+      _archivedLeadIds.toList(),
+    );
   }
 
   Future<void> _fetchLeads() async {
-    setState(() => _isLoading = true);
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token') ?? prefs.getString('authToken');
 
-      if (token == null || token.isEmpty) {
-        print("🔴 No token found.");
-        setState(() => _isLoading = false);
-        return;
-      }
+      if (token == null || token.isEmpty) return;
 
-      final uri = Uri.parse('https://happywedz.com/api/inbox');
       final res = await http.get(
-        uri,
-        headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
+        Uri.parse('https://happywedz.com/api/inbox'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token'
+        },
       );
 
-      print("🟣 API ${res.statusCode}");
-      print(res.body);
-
-      dynamic data = json.decode(res.body);
-      if (res.statusCode == 200 && data is Map) {
-        setState(() {
-          _leads = data["inbox"] ?? data["data"] ?? [];
-          LeadsPage.latestLeads = _leads; // ✅ store globally
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        _leads = data["inbox"] ?? data["data"] ?? [];
+        LeadsPage.latestLeads = _leads;
       }
     } catch (e) {
-      print("🔥 Exception: $e");
-      setState(() => _isLoading = false);
+      print("🔥 Leads error: $e");
+    }
+  }
+
+
+  Future<void> _fetchConversations() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token') ?? prefs.getString('authToken');
+
+      if (token == null) return;
+
+      final res = await http.get(
+        Uri.parse("https://happywedz.com/api/messages/vendor/conversations"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Accept": "application/json",
+        },
+      );
+
+      if (res.statusCode == 200) {
+        final List list = jsonDecode(res.body);
+
+        for (var c in list) {
+          final requestId = c['requestId']?.toString();
+          final conversationId = c['id']?.toString();
+
+          print("🟢 Found => requestId: $requestId | conversationId: $conversationId");
+
+
+          if (requestId != null && conversationId != null) {
+            _conversationMap[requestId] = conversationId;
+          }
+        }
+        print("📦 Conversation Map => $_conversationMap");
+      }
+    } catch (e) {
+      print("🔥 Conversation error: $e");
     }
   }
 
@@ -221,7 +287,7 @@ class _LeadsPageState extends State<LeadsPage> {
         _openedLeadIds.add(id);
         final updated = await Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => LeadDetailScreen(lead: lead)),
+          MaterialPageRoute(builder: (_) => LeadDetailScreen(lead: lead, conversationId: _conversationMap[id],)),
         );
         if (updated == true) _fetchLeads();
         setState(() {});
@@ -304,15 +370,18 @@ class _LeadsPageState extends State<LeadsPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   PopupMenuButton<String>(
-                    onSelected: (value) {
+                    onSelected: (value) async {
+                      // if (value == 'archive') {
+                      //   setState(() {
+                      //     if (_archivedLeadIds.contains(id)) {
+                      //       _archivedLeadIds.remove(id);
+                      //     } else {
+                      //       _archivedLeadIds.add(id);
+                      //     }
+                      //   });
+                      // }
                       if (value == 'archive') {
-                        setState(() {
-                          if (_archivedLeadIds.contains(id)) {
-                            _archivedLeadIds.remove(id);
-                          } else {
-                            _archivedLeadIds.add(id);
-                          }
-                        });
+                        await _toggleArchive(id); // 🔥 PERSISTENT LOGIC
                       }
 
                       if (value == 'delete') {
@@ -456,4 +525,8 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
 }
+
+
+
+
 

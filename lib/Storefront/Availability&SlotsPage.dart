@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_services/api_service_vendor.dart';
 
 class SlotsPage extends StatefulWidget {
   const SlotsPage({super.key});
@@ -24,6 +25,8 @@ class _SlotsPageState extends State<SlotsPage> {
   int? serviceId;
   int? vendorSubcategoryId;
   String? token;
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
 
   @override
   void initState() {
@@ -66,37 +69,34 @@ class _SlotsPageState extends State<SlotsPage> {
   }
 
   /// Fetch slots from API and merge with local data
+
   Future<void> fetchVendorSlots() async {
     if (vendorId == null || token == null) return;
 
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/vendor/$vendorId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByVendorId(
+        vendorId: vendorId!,
+        token: token!,
       );
 
-      if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
+      if (data == null) return;
 
-        if (data.isNotEmpty && data[0]['attributes'] != null) {
-          serviceId = data[0]['id'];
-          vendorSubcategoryId ??= data[0]['vendor_subcategory_id'];
+      serviceId = data["id"];
+      vendorSubcategoryId ??= data["vendor_subcategory_id"];
 
-          final List<dynamic> apiSlots = data[0]['attributes']['available_slots'] ?? [];
+      final List<dynamic> apiSlots =
+          data["attributes"]?["available_slots"] ?? [];
 
-          setState(() {
-            availableDays = {
-              ...availableDays,
-              ...apiSlots.map((d) => _normalize(DateTime.parse(d['date']))),
-            };
-          });
+      setState(() {
+        availableDays = {
+          ...availableDays,
+          ...apiSlots.map((d) => _normalize(DateTime.parse(d))),
+        };
+      });
 
-          // Save merged data locally
-          await _saveLocally();
-        }
-      }
+      await _saveLocally();
     } catch (e) {
-      print("Error fetching slots: $e");
+      debugPrint("❌ Fetch slots error: $e");
     }
   }
 
@@ -118,45 +118,50 @@ class _SlotsPageState extends State<SlotsPage> {
   /// Save to server via PUT API
   Future<void> _saveToServer() async {
     if (vendorId == null || token == null || serviceId == null) return;
+
     setState(() => saving = true);
 
-    final requestBody = {
+    // 🔥 Fetch latest attributes (SAFETY)
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    // ✅ update ONLY slots
+    attributes["available_slots"] = availableDays
+        .map((d) => d.toIso8601String().split('T')[0])
+        .toList();
+
+    final body = {
       "vendor_id": vendorId,
       "vendor_subcategory_id": vendorSubcategoryId,
-      "attributes": {
-        "available_slots": availableDays.map((d) => d.toIso8601String().split('T')[0]).toList(),
-      }
+      "attributes": attributes,
     };
 
-    await _saveLocally(); // save immediately
+    await _saveLocally(); // local cache first
 
-    try {
-      final response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(requestBody),
-      );
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: body,
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Slots saved successfully.")),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to save slots")),
-        );
-      }
-    } catch (_) {
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error saving slots")),
+        const SnackBar(content: Text("Slots saved successfully.")),
       );
-    } finally {
-      setState(() => saving = false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save slots")),
+      );
     }
+
+    setState(() => saving = false);
   }
+
 
   Widget _summaryChip(IconData icon, int count, Color color) {
     return Chip(

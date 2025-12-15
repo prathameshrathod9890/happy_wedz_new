@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_services/api_service_vendor.dart';
 
 class GalleryUploadPage extends StatefulWidget {
   @override
@@ -14,12 +15,15 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
   List<File> selectedImages = [];
   List<String> savedBase64ImagesList = []; // Stored images
   final ImagePicker picker = ImagePicker();
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
 
   int? vendorId;
   int? serviceId;
   String? token;
   bool loadingVendorData = true;
   bool uploading = false;
+
 
   Map<String, dynamic> currentAttributes = {}; // existing attributes
 
@@ -37,9 +41,9 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
 
     print("📌 Loaded => vendorId: $vendorId, serviceId: $serviceId, token: $token");
 
-    if (serviceId != null && token != null) {
-      await fetchCurrentAttributes();
-    }
+    // if (serviceId != null && token != null) {
+    //   await fetchCurrentAttributes();
+    // }
 
     if (vendorId != null) {
       savedBase64ImagesList = prefs.getStringList('images_$vendorId') ?? [];
@@ -49,34 +53,34 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
     setState(() => loadingVendorData = false);
   }
 
-  Future<void> fetchCurrentAttributes() async {
-    print("📩 Fetching existing vendor-service attributes...");
-    try {
-      final response = await http.get(
-        Uri.parse('https://happywedz.com/api/vendor-services/$serviceId'),
-        headers: {"Authorization": "Bearer $token"},
-      );
-
-      print("📬 GET Response: ${response.statusCode} | ${response.body}");
-
-      if (response.statusCode == 200) {
-        final parsed = jsonDecode(response.body);
-        currentAttributes = Map<String, dynamic>.from(parsed["attributes"] ?? {});
-
-        // If there are existing images in attributes, merge them
-        if (currentAttributes.containsKey("media") &&
-            currentAttributes["media"] is List) {
-          savedBase64ImagesList = List<String>.from(currentAttributes["media"]);
-        }
-
-        print("✅ Loaded current attributes & images: ${savedBase64ImagesList.length}");
-      } else {
-        print("❌ Failed to fetch existing attributes");
-      }
-    } catch (e) {
-      print("❌ Error fetching current attributes: $e");
-    }
-  }
+  // Future<void> fetchCurrentAttributes() async {
+  //   print("📩 Fetching existing vendor-service attributes...");
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse('https://happywedz.com/api/vendor-services/$serviceId'),
+  //       headers: {"Authorization": "Bearer $token"},
+  //     );
+  //
+  //     print("📬 GET Response: ${response.statusCode} | ${response.body}");
+  //
+  //     if (response.statusCode == 200) {
+  //       final parsed = jsonDecode(response.body);
+  //       currentAttributes = Map<String, dynamic>.from(parsed["attributes"] ?? {});
+  //
+  //       // If there are existing images in attributes, merge them
+  //       if (currentAttributes.containsKey("media") &&
+  //           currentAttributes["media"] is List) {
+  //         savedBase64ImagesList = List<String>.from(currentAttributes["media"]);
+  //       }
+  //
+  //       print("✅ Loaded current attributes & images: ${savedBase64ImagesList.length}");
+  //     } else {
+  //       print("❌ Failed to fetch existing attributes");
+  //     }
+  //   } catch (e) {
+  //     print("❌ Error fetching current attributes: $e");
+  //   }
+  // }
 
   Future<void> pickImages() async {
     final List<XFile>? files = await picker.pickMultiImage(imageQuality: 80);
@@ -93,11 +97,13 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
     setState(() => selectedImages.removeAt(index));
   }
 
+
   Future<void> uploadGallery() async {
     if (vendorId == null || token == null || serviceId == null) return;
+
     if (selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Please select images")),
+        const SnackBar(content: Text("Please select images")),
       );
       return;
     }
@@ -105,60 +111,107 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
     setState(() => uploading = true);
 
     try {
+      // 🔥 STEP 1: Fetch LATEST attributes from server
+      final latest = await _vendorApi.getByServiceId(
+        serviceId: serviceId!,
+        token: token!,
+      );
+
+      Map<String, dynamic> attributes =
+      Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+      // 🔥 STEP 2: Convert images to base64
       List<String> base64Images = [];
 
       for (var file in selectedImages) {
-        List<int> bytes = await file.readAsBytes();
-        String base64Str = base64Encode(bytes);
+        final bytes = await file.readAsBytes();
+        final base64Str = base64Encode(bytes);
         base64Images.add("data:image/jpeg;base64,$base64Str");
       }
 
-      // Merge new images with existing ones
-      savedBase64ImagesList.addAll(base64Images);
-      currentAttributes["media"] = savedBase64ImagesList;
+      // 🔥 STEP 3: Merge with existing media
+      List<String> existingMedia =
+      List<String>.from(attributes["media"] ?? []);
 
-      var body = jsonEncode({
-        "vendor_id": vendorId,
-        "attributes": currentAttributes,
-      });
+      existingMedia.addAll(base64Images);
+      attributes["media"] = existingMedia;
 
-      var response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Authorization": "Bearer $token",
-          "Content-Type": "application/json",
+      // 🔥 STEP 4: PUT merged attributes
+      final success = await _vendorApi.updateService(
+        serviceId: serviceId!,
+        token: token!,
+        body: {
+          "vendor_id": vendorId,
+          "attributes": attributes,
         },
-        body: body,
       );
 
-      print("📥 Response: ${response.statusCode} => ${response.body}");
-
-      if (response.statusCode == 200) {
+      if (success) {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setStringList("images_$vendorId", savedBase64ImagesList);
+        await prefs.setStringList("images_$vendorId", existingMedia);
 
-        selectedImages.clear();
+        setState(() {
+          savedBase64ImagesList = existingMedia;
+          selectedImages.clear();
+        });
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Gallery saved")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gallery saved successfully")),
+        );
       } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Upload failed")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to save gallery")),
+        );
       }
     } catch (e) {
-      print("❌ Upload error: $e");
-    } finally {
-      setState(() => uploading = false);
+      debugPrint("❌ Gallery upload error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error uploading gallery")),
+      );
     }
+
+    setState(() => uploading = false);
   }
 
-  void deleteSavedImage(int index) async {
-    final prefs = await SharedPreferences.getInstance();
-    savedBase64ImagesList.removeAt(index);
-    currentAttributes["media"] = savedBase64ImagesList;
-    await prefs.setStringList("images_$vendorId", savedBase64ImagesList);
-    setState(() {});
-    print("🗑 Deleted saved image at index: $index");
+  // void deleteSavedImage(int index) async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   savedBase64ImagesList.removeAt(index);
+  //   currentAttributes["media"] = savedBase64ImagesList;
+  //   await prefs.setStringList("images_$vendorId", savedBase64ImagesList);
+  //   setState(() {});
+  //   print("🗑 Deleted saved image at index: $index");
+  // }
+
+  Future<void> deleteSavedImage(int index) async {
+    if (vendorId == null || token == null || serviceId == null) return;
+
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    List<String> media = List<String>.from(attributes["media"] ?? []);
+    media.removeAt(index);
+    attributes["media"] = media;
+
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: {
+        "vendor_id": vendorId,
+        "attributes": attributes,
+      },
+    );
+
+    if (success) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList("images_$vendorId", media);
+
+      setState(() => savedBase64ImagesList = media);
+    }
   }
 
   @override
@@ -283,17 +336,51 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
 
               SizedBox(height: 30),
 
-              ElevatedButton(
-                onPressed: uploading ? null : uploadGallery,
-                child: uploading
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text("Save Gallery"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF00509D),
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 14),
+              // ElevatedButton(
+              //   onPressed: uploading ? null : uploadGallery,
+              //   child: uploading
+              //       ? CircularProgressIndicator(color: Colors.white)
+              //       : Text("Save Gallery"),
+              //   style: ElevatedButton.styleFrom(
+              //     backgroundColor: Color(0xFF00509D),
+              //     foregroundColor: Colors.white,
+              //     padding: EdgeInsets.symmetric(vertical: 14),
+              //   ),
+              // ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: uploading ? null : uploadGallery,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00509D), // Steel Azure
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: uploading
+                      ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                      : const Text(
+                    "Save Gallery",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
+
             ],
           ),
         ),

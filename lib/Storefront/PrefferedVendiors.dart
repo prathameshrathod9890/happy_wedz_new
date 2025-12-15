@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_services/api_service_vendor.dart';
 
 class PreferredVendorsPage extends StatefulWidget {
   const PreferredVendorsPage({super.key});
@@ -14,6 +15,8 @@ class _PreferredVendorsPageState extends State<PreferredVendorsPage> {
   TextEditingController searchController = TextEditingController();
   List<Map<String, dynamic>> suggestions = [];
   List<Map<String, dynamic>> selectedVendors = [];
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
   bool loading = false;
   bool loadingVendorData = true;
   bool saving = false;
@@ -57,40 +60,47 @@ class _PreferredVendorsPageState extends State<PreferredVendorsPage> {
   /// Fetch existing preferred vendors from API
   Future<void> fetchExistingPreferredVendors() async {
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/vendor/$vendorId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByVendorId(
+        vendorId: vendorId!,
+        token: token!,
       );
 
-      if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
-        if (data.isNotEmpty) {
-          final apiVendors = data[0]['attributes']?['preferred_vendors'] ?? [];
-          final List<Map<String, dynamic>> apiVendorList = apiVendors
-              .map<Map<String, dynamic>>((v) => {
-            'id': v['id'],
-            'name': v['name'] ?? '',
-            'location': v['city'] ?? '',
-            'rating': v['rating'] ?? '0',
-          })
-              .toList();
+      if (data == null) return;
 
-          // Merge saved local vendors
-          for (var v in selectedVendors) {
-            if (!apiVendorList.any((apiV) => apiV['id'] == v['id'])) {
-              apiVendorList.add(v);
-            }
-          }
+      serviceId = data["id"];
+      vendorSubcategoryId ??= data["vendor_subcategory_id"];
 
-          setState(() {
-            selectedVendors = apiVendorList;
-          });
+      final List<dynamic> apiVendors =
+          data["attributes"]?["preferred_vendors"] ?? [];
+
+      final List<Map<String, dynamic>> apiVendorList =
+      apiVendors.map<Map<String, dynamic>>((v) {
+        if (v is Map) {
+          return {
+            "id": v["id"],
+            "name": v["name"] ?? "",
+            "location": v["city"] ?? "",
+            "rating": v["rating"] ?? "0",
+          };
+        }
+        // fallback if API returns only IDs
+        return {"id": v, "name": "", "location": "", "rating": "0"};
+      }).toList();
+
+      // merge local vendors (offline safety)
+      for (var v in selectedVendors) {
+        if (!apiVendorList.any((api) => api["id"] == v["id"])) {
+          apiVendorList.add(v);
         }
       }
+
+      setState(() => selectedVendors = apiVendorList);
+      await _saveVendorsLocally();
     } catch (e) {
-      print("Error fetching vendors: $e");
+      debugPrint("❌ Fetch preferred vendors error: $e");
     }
   }
+
 
   /// Search vendors API
   void searchVendors(String query) async {
@@ -174,52 +184,45 @@ class _PreferredVendorsPageState extends State<PreferredVendorsPage> {
 
     setState(() => saving = true);
 
-    final List<int> vendorIds = selectedVendors.map<int>((v) => v['id'] as int).toList();
+    // 🔥 Fetch latest attributes first (SAFETY)
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
 
-    final Map<String, dynamic> requestBody = {
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    // ✅ Update ONLY preferred vendors
+    attributes["preferred_vendors"] =
+        selectedVendors.map((v) => v["id"]).toList();
+
+    final body = {
       "vendor_id": vendorId,
-      "attributes": {"preferred_vendors": vendorIds},
+      "vendor_subcategory_id": vendorSubcategoryId,
+      "attributes": attributes,
     };
 
-    // Include vendorSubcategoryId only if it exists
-    if (vendorSubcategoryId != null) {
-      requestBody["vendor_subcategory_id"] = vendorSubcategoryId;
-    }
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: body,
+    );
 
-    try {
-      final response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(requestBody),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        // Save locally
-        final prefs = await SharedPreferences.getInstance();
-        final key = 'preferredVendors_$vendorId';
-        final vendorJsonList = selectedVendors.map((v) => jsonEncode(v)).toList();
-        await prefs.setStringList(key, vendorJsonList);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Preferred vendors saved successfully.")),
-        );
-      } else {
-        final data = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data["error"] ?? "Failed to save")),
-        );
-      }
-    } catch (e) {
+    if (success) {
+      await _saveVendorsLocally();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error saving preferred vendors")),
+        const SnackBar(content: Text("Preferred vendors saved successfully.")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save preferred vendors")),
       );
     }
 
     setState(() => saving = false);
   }
+
 
 
 

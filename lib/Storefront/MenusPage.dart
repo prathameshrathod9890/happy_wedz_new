@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import '../api_services/api_service_vendor.dart';
 
 class MenusPage extends StatefulWidget {
   const MenusPage({super.key});
@@ -13,6 +14,7 @@ class MenusPage extends StatefulWidget {
 class _MenusPageState extends State<MenusPage> {
   final TextEditingController vegPriceController = TextEditingController();
   final TextEditingController nonVegPriceController = TextEditingController();
+  final VendorServiceApi _vendorApi = VendorServiceApi();
 
   bool isLoading = true;
   bool isSaving = false;
@@ -63,29 +65,31 @@ class _MenusPageState extends State<MenusPage> {
 
   Future<void> fetchMenuData() async {
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByServiceId(
+        serviceId: serviceId!,
+        token: token!,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final attributes = data["attributes"] ?? {};
+      if (data == null) return;
 
-        if (vegPriceController.text.isEmpty) {
-          vegPriceController.text = (attributes["veg_price"] ?? "").toString();
-        }
-        if (nonVegPriceController.text.isEmpty) {
-          nonVegPriceController.text =
-              (attributes["non_veg_price"] ?? "").toString();
-        }
+      final attributes = Map<String, dynamic>.from(data["attributes"] ?? {});
 
-        await _autosaveLocally();
+      if (vegPriceController.text.isEmpty) {
+        vegPriceController.text =
+            attributes["veg_price"]?.toString() ?? "";
       }
+
+      if (nonVegPriceController.text.isEmpty) {
+        nonVegPriceController.text =
+            attributes["non_veg_price"]?.toString() ?? "";
+      }
+
+      await _autosaveLocally();
     } catch (e) {
-      print("❌ Error fetching menu data: $e");
+      debugPrint("❌ fetch menu error: $e");
     }
   }
+
 
   Future<void> _autosaveLocally() async {
     if (vendorId == null) return;
@@ -109,44 +113,46 @@ class _MenusPageState extends State<MenusPage> {
 
     setState(() => isSaving = true);
 
-    final requestBody = {
+    // 🔥 Fetch latest attributes first (SAFETY)
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    // ✅ Update ONLY menu-related fields
+    attributes.addAll({
+      "veg_price": vegPriceController.text.trim(),
+      "non_veg_price": nonVegPriceController.text.trim(),
+    });
+
+    final body = {
       "vendor_id": vendorId,
-      "attributes": {
-        "veg_price": vegPriceController.text.trim(),
-        "non_veg_price": nonVegPriceController.text.trim(),
-      }
+      "attributes": attributes,
     };
 
-    try {
-      final response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(requestBody),
-      );
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: body,
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Menus saved successfully")),
-        );
-        await _autosaveLocally();
-      } else {
-        final data = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data["error"] ?? "Failed to save menus")),
-        );
-      }
-    } catch (e) {
-      print("❌ Error saving menus: $e");
+    if (success) {
+      await _autosaveLocally();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error saving menus")),
+        const SnackBar(content: Text("Menus saved successfully")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save menus")),
       );
     }
 
     setState(() => isSaving = false);
   }
+
 
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(

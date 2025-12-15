@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_services/api_service_vendor.dart';
+
 
 class BasicInfoPage extends StatefulWidget {
   @override
@@ -15,7 +17,6 @@ class _BasicInfoPageState extends State<BasicInfoPage> {
   bool isBold = false;
   bool isItalic = false;
   bool isUnderline = false;
-
   String vendorType = '';
   int? vendorTypeId;
   int? vendorSubcategoryId;
@@ -29,6 +30,8 @@ class _BasicInfoPageState extends State<BasicInfoPage> {
   String? token;
 
   Map<String, dynamic> currentAttributes = {};
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
 
   @override
   void initState() {
@@ -52,51 +55,82 @@ class _BasicInfoPageState extends State<BasicInfoPage> {
     }
   }
 
+  // Future<void> fetchVendorService() async {
+  //   print("Fetching vendor service from API...");
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse("https://happywedz.com/api/vendor-services/vendor/$vendorId"),
+  //       headers: {"Authorization": "Bearer $token"},
+  //     );
+  //
+  //     print("Vendor service response code: ${response.statusCode}");
+  //     if (response.statusCode == 200) {
+  //       final List data = jsonDecode(response.body);
+  //       print("Vendor service data: $data");
+  //
+  //       if (data.isNotEmpty && data[0]["id"] != null) {
+  //         final serviceId = data[0]["id"];
+  //         final prefs = await SharedPreferences.getInstance();
+  //         await prefs.setInt("serviceId", serviceId);
+  //
+  //         currentAttributes = Map<String, dynamic>.from(data[0]["attributes"] ?? {});
+  //         businessNameController.text = currentAttributes["name"] ?? "";
+  //         aboutController.text = currentAttributes["about_us"] ?? "";
+  //
+  //         await prefs.setString("businessName", businessNameController.text);
+  //         await prefs.setString("aboutUs", aboutController.text);
+  //
+  //         print("Cached businessName: ${businessNameController.text}, aboutUs: ${aboutController.text}");
+  //
+  //         vendorSubcategoryId = data[0]["vendor_subcategory_id"];
+  //         if (vendorSubcategoryId != null && subcategories.isNotEmpty) {
+  //           primarySubcategory = subcategories.firstWhere(
+  //                   (s) => s['id'] == vendorSubcategoryId,
+  //               orElse: () => {'name': null})['name'];
+  //         }
+  //
+  //         if (vendorSubcategoryId != null) {
+  //           await prefs.setInt('vendor_subcategory_id', vendorSubcategoryId!);
+  //         }
+  //       }
+  //     }
+  //   } catch (e) {
+  //     print("Error fetching vendor-service: $e");
+  //   } finally {
+  //     setState(() => isLoading = false);
+  //   }
+  // }
+
   Future<void> fetchVendorService() async {
-    print("Fetching vendor service from API...");
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/vendor/$vendorId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByVendorId(
+        vendorId: vendorId!,
+        token: token!,
       );
 
-      print("Vendor service response code: ${response.statusCode}");
-      if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
-        print("Vendor service data: $data");
+      if (data == null) return;
 
-        if (data.isNotEmpty && data[0]["id"] != null) {
-          final serviceId = data[0]["id"];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt("serviceId", serviceId);
+      final prefs = await SharedPreferences.getInstance();
 
-          currentAttributes = Map<String, dynamic>.from(data[0]["attributes"] ?? {});
-          businessNameController.text = currentAttributes["name"] ?? "";
-          aboutController.text = currentAttributes["about_us"] ?? "";
+      final serviceId = data["id"];
+      await prefs.setInt("serviceId", serviceId);
 
-          await prefs.setString("businessName", businessNameController.text);
-          await prefs.setString("aboutUs", aboutController.text);
+      currentAttributes = Map<String, dynamic>.from(data["attributes"] ?? {});
 
-          print("Cached businessName: ${businessNameController.text}, aboutUs: ${aboutController.text}");
+      businessNameController.text = currentAttributes["name"] ?? "";
+      aboutController.text = currentAttributes["about_us"] ?? "";
 
-          vendorSubcategoryId = data[0]["vendor_subcategory_id"];
-          if (vendorSubcategoryId != null && subcategories.isNotEmpty) {
-            primarySubcategory = subcategories.firstWhere(
-                    (s) => s['id'] == vendorSubcategoryId,
-                orElse: () => {'name': null})['name'];
-          }
-
-          if (vendorSubcategoryId != null) {
-            await prefs.setInt('vendor_subcategory_id', vendorSubcategoryId!);
-          }
-        }
+      vendorSubcategoryId = data["vendor_subcategory_id"];
+      if (vendorSubcategoryId != null) {
+        await prefs.setInt("vendor_subcategory_id", vendorSubcategoryId!);
       }
     } catch (e) {
-      print("Error fetching vendor-service: $e");
+      debugPrint("❌ fetchVendorService error: $e");
     } finally {
       setState(() => isLoading = false);
     }
   }
+
 
   Future<void> fetchVendorData() async {
     print("Fetching vendor data from API...");
@@ -181,12 +215,91 @@ class _BasicInfoPageState extends State<BasicInfoPage> {
         TextSelection.fromPosition(TextPosition(offset: aboutController.text.length));
   }
 
+  // Future<void> saveBasicInfo() async {
+  //   if (vendorId == null || token == null) return;
+  //
+  //   if (businessNameController.text.isEmpty || vendorSubcategoryId == null) {
+  //     ScaffoldMessenger.of(context)
+  //         .showSnackBar(SnackBar(content: Text("Please fill all required fields")));
+  //     return;
+  //   }
+  //
+  //   setState(() => isSaving = true);
+  //
+  //   final prefs = await SharedPreferences.getInstance();
+  //   int? serviceId = prefs.getInt("serviceId");
+  //
+  //   // Merge updated name and about_us into existing attributes
+  //   currentAttributes["name"] = businessNameController.text.trim();
+  //   currentAttributes["about_us"] = aboutController.text.trim();
+  //
+  //   final requestBody = {
+  //     "vendor_id": vendorId,
+  //     "vendor_subcategory_id": vendorSubcategoryId,
+  //     "attributes": currentAttributes,
+  //   };
+  //
+  //   final String url;
+  //   final String method;
+  //
+  //   if (serviceId == null) {
+  //     url = "https://happywedz.com/api/vendor-services";
+  //     method = "POST";
+  //   } else {
+  //     url = "https://happywedz.com/api/vendor-services/$serviceId";
+  //     method = "PUT";
+  //   }
+  //
+  //   print("Saving basic info via $method to $url");
+  //   print("Request body: $requestBody");
+  //
+  //   try {
+  //     final response = await (method == "POST"
+  //         ? http.post(Uri.parse(url), headers: {
+  //       "Content-Type": "application/json",
+  //       "Authorization": "Bearer $token",
+  //     }, body: jsonEncode(requestBody))
+  //         : http.put(Uri.parse(url), headers: {
+  //       "Content-Type": "application/json",
+  //       "Authorization": "Bearer $token",
+  //     }, body: jsonEncode(requestBody)));
+  //
+  //     final data = jsonDecode(response.body);
+  //     print("Save response: $data");
+  //
+  //     if (response.statusCode == 200 || response.statusCode == 201) {
+  //       if (serviceId == null && data["id"] != null) {
+  //         await prefs.setInt("serviceId", data["id"]);
+  //       }
+  //
+  //       if (vendorSubcategoryId != null) {
+  //         await prefs.setInt('vendor_subcategory_id', vendorSubcategoryId!);
+  //       }
+  //
+  //       // Cache locally
+  //       await prefs.setString("businessName", businessNameController.text.trim());
+  //       await prefs.setString("aboutUs", aboutController.text.trim());
+  //
+  //       ScaffoldMessenger.of(context)
+  //           .showSnackBar(SnackBar(content: Text("Basic info saved successfully")));
+  //     } else {
+  //       ScaffoldMessenger.of(context)
+  //           .showSnackBar(SnackBar(content: Text(data["error"] ?? "Failed")));
+  //     }
+  //   } catch (e) {
+  //     print("Error saving basic info: $e");
+  //   }
+  //
+  //   setState(() => isSaving = false);
+  // }
+
   Future<void> saveBasicInfo() async {
     if (vendorId == null || token == null) return;
 
     if (businessNameController.text.isEmpty || vendorSubcategoryId == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Please fill all required fields")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all required fields")),
+      );
       return;
     }
 
@@ -195,65 +308,53 @@ class _BasicInfoPageState extends State<BasicInfoPage> {
     final prefs = await SharedPreferences.getInstance();
     int? serviceId = prefs.getInt("serviceId");
 
-    // Merge updated name and about_us into existing attributes
+    // 🔥 SAFETY: fetch latest attributes again before update
+    if (serviceId != null) {
+      final latest = await _vendorApi.getByServiceId(
+        serviceId: serviceId,
+        token: token!,
+      );
+
+      currentAttributes =
+      Map<String, dynamic>.from(latest?["attributes"] ?? currentAttributes);
+    }
+
+    // ✅ update only BASIC INFO fields
     currentAttributes["name"] = businessNameController.text.trim();
     currentAttributes["about_us"] = aboutController.text.trim();
 
-    final requestBody = {
+    final body = {
       "vendor_id": vendorId,
       "vendor_subcategory_id": vendorSubcategoryId,
       "attributes": currentAttributes,
     };
 
-    final String url;
-    final String method;
+    bool success;
 
     if (serviceId == null) {
-      url = "https://happywedz.com/api/vendor-services";
-      method = "POST";
+      success = await _vendorApi.createService(
+        token: token!,
+        body: body,
+      );
     } else {
-      url = "https://happywedz.com/api/vendor-services/$serviceId";
-      method = "PUT";
+      success = await _vendorApi.updateService(
+        serviceId: serviceId,
+        token: token!,
+        body: body,
+      );
     }
 
-    print("Saving basic info via $method to $url");
-    print("Request body: $requestBody");
+    if (success) {
+      await prefs.setString("businessName", businessNameController.text.trim());
+      await prefs.setString("aboutUs", aboutController.text.trim());
 
-    try {
-      final response = await (method == "POST"
-          ? http.post(Uri.parse(url), headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      }, body: jsonEncode(requestBody))
-          : http.put(Uri.parse(url), headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      }, body: jsonEncode(requestBody)));
-
-      final data = jsonDecode(response.body);
-      print("Save response: $data");
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        if (serviceId == null && data["id"] != null) {
-          await prefs.setInt("serviceId", data["id"]);
-        }
-
-        if (vendorSubcategoryId != null) {
-          await prefs.setInt('vendor_subcategory_id', vendorSubcategoryId!);
-        }
-
-        // Cache locally
-        await prefs.setString("businessName", businessNameController.text.trim());
-        await prefs.setString("aboutUs", aboutController.text.trim());
-
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Basic info saved successfully")));
-      } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(data["error"] ?? "Failed")));
-      }
-    } catch (e) {
-      print("Error saving basic info: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Basic info saved successfully")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save basic info")),
+      );
     }
 
     setState(() => isSaving = false);
@@ -401,3 +502,322 @@ class _BasicInfoPageState extends State<BasicInfoPage> {
     );
   }
 }
+
+//
+// import 'dart:convert';
+// import 'package:flutter/material.dart';
+// import 'package:http/http.dart' as http;
+// import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:flutter_markdown/flutter_markdown.dart';
+//
+// class BasicInfoPage extends StatefulWidget {
+//   @override
+//   _BasicInfoPageState createState() => _BasicInfoPageState();
+// }
+//
+// class _BasicInfoPageState extends State<BasicInfoPage> {
+//   final TextEditingController businessNameController = TextEditingController();
+//   final TextEditingController aboutController = TextEditingController();
+//
+//   bool isBold = false;
+//   bool isItalic = false;
+//   bool isUnderline = false;
+//   bool isPreview = false;
+//
+//   String vendorType = '';
+//   int? vendorTypeId;
+//   int? vendorSubcategoryId;
+//   String? primarySubcategory;
+//
+//   List<Map<String, dynamic>> subcategories = [];
+//   Map<String, dynamic> currentAttributes = {};
+//
+//   bool isLoading = true;
+//   bool isSaving = false;
+//
+//   int? vendorId;
+//   String? token;
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadCredentialsAndData();
+//   }
+//
+//   Future<void> _loadCredentialsAndData() async {
+//     final prefs = await SharedPreferences.getInstance();
+//     vendorId = prefs.getInt('vendorId');
+//     token = prefs.getString('token');
+//     vendorSubcategoryId = prefs.getInt('vendor_subcategory_id');
+//
+//     if (vendorId != null && token != null) {
+//       await fetchVendorService();
+//       await fetchVendorData();
+//     } else {
+//       setState(() => isLoading = false);
+//     }
+//   }
+//
+//   // ================= API =================
+//
+//   Future<void> fetchVendorService() async {
+//     try {
+//       final response = await http.get(
+//         Uri.parse("https://happywedz.com/api/vendor-services/vendor/$vendorId"),
+//         headers: {"Authorization": "Bearer $token"},
+//       );
+//
+//       if (response.statusCode == 200) {
+//         final List data = jsonDecode(response.body);
+//
+//         if (data.isNotEmpty) {
+//           currentAttributes =
+//           Map<String, dynamic>.from(data[0]["attributes"] ?? {});
+//           businessNameController.text =
+//               currentAttributes["name"] ?? "";
+//           aboutController.text =
+//               currentAttributes["about_us"] ?? "";
+//
+//           vendorSubcategoryId = data[0]["vendor_subcategory_id"];
+//         }
+//       }
+//     } catch (e) {
+//       print("❌ Vendor service error: $e");
+//     } finally {
+//       setState(() => isLoading = false);
+//     }
+//   }
+//
+//   Future<void> fetchVendorData() async {
+//     try {
+//       final response = await http.get(
+//         Uri.parse("https://happywedz.com/api/vendor/$vendorId"),
+//         headers: {"Authorization": "Bearer $token"},
+//       );
+//
+//       if (response.statusCode == 200) {
+//         final data = jsonDecode(response.body);
+//
+//         vendorType = data['vendorType']?['name'] ?? '';
+//         vendorTypeId = data['vendorType']?['id'];
+//
+//         await fetchSubcategories();
+//       }
+//     } catch (e) {
+//       print("❌ Vendor data error: $e");
+//     }
+//   }
+//
+//   Future<void> fetchSubcategories() async {
+//     if (vendorType.isEmpty) return;
+//
+//     try {
+//       final response = await http.get(
+//         Uri.parse("https://happywedz.com/api/vendor-types/with-subcategories/all"),
+//       );
+//
+//       if (response.statusCode == 200) {
+//         final List data = jsonDecode(response.body);
+//         final typeData = data.firstWhere(
+//               (e) =>
+//           e['name'].toString().toLowerCase() ==
+//               vendorType.toLowerCase(),
+//           orElse: () => null,
+//         );
+//
+//         if (typeData != null) {
+//           subcategories = (typeData['subcategories'] as List)
+//               .map((e) => {'id': e['id'], 'name': e['name']})
+//               .toList();
+//
+//           if (vendorSubcategoryId != null) {
+//             primarySubcategory = subcategories
+//                 .firstWhere((s) => s['id'] == vendorSubcategoryId,
+//                 orElse: () => {'name': ''})['name'];
+//           }
+//         }
+//       }
+//     } catch (e) {
+//       print("❌ Subcategory error: $e");
+//     }
+//   }
+//
+//   // ================= FORMAT HELPERS =================
+//
+//   void addBullet() {
+//     aboutController.text += "\n• ";
+//   }
+//
+//   void addHeader() {
+//     aboutController.text += "\n## Heading\n";
+//   }
+//
+//   // ================= SAVE =================
+//
+//   Future<void> saveBasicInfo() async {
+//     if (vendorId == null || token == null) return;
+//
+//     currentAttributes["name"] = businessNameController.text.trim();
+//     currentAttributes["about_us"] = aboutController.text.trim();
+//
+//     final body = {
+//       "vendor_id": vendorId,
+//       "vendor_subcategory_id": vendorSubcategoryId,
+//       "attributes": currentAttributes,
+//     };
+//
+//     setState(() => isSaving = true);
+//
+//     try {
+//       final response = await http.post(
+//         Uri.parse("https://happywedz.com/api/vendor-services"),
+//         headers: {
+//           "Authorization": "Bearer $token",
+//           "Content-Type": "application/json",
+//         },
+//         body: jsonEncode(body),
+//       );
+//
+//       if (response.statusCode == 200 || response.statusCode == 201) {
+//         ScaffoldMessenger.of(context).showSnackBar(
+//           const SnackBar(content: Text("✅ Basic info saved")),
+//         );
+//       }
+//     } catch (e) {
+//       print("❌ Save error: $e");
+//     } finally {
+//       setState(() => isSaving = false);
+//     }
+//   }
+//
+//   // ================= UI =================
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(
+//         title: const Text("Basic Information"),
+//         backgroundColor: const Color(0xFF0072BB),
+//       ),
+//       body: isLoading
+//           ? const Center(child: CircularProgressIndicator())
+//           : SingleChildScrollView(
+//         padding: const EdgeInsets.all(16),
+//         child: Container(
+//           padding: const EdgeInsets.all(20),
+//           decoration: BoxDecoration(
+//             color: Colors.white,
+//             borderRadius: BorderRadius.circular(14),
+//             boxShadow: const [
+//               BoxShadow(
+//                   color: Colors.black12,
+//                   blurRadius: 8,
+//                   offset: Offset(0, 4))
+//             ],
+//           ),
+//           child: Column(
+//             crossAxisAlignment: CrossAxisAlignment.start,
+//             children: [
+//               _field("Vendor Business Name", businessNameController),
+//
+//               // ===== ABOUT US =====
+//               Row(
+//                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+//                 children: [
+//                   const Text("About Us",
+//                       style: TextStyle(fontWeight: FontWeight.w600)),
+//                   IconButton(
+//                     icon: Icon(
+//                       isPreview
+//                           ? Icons.edit
+//                           : Icons.remove_red_eye,
+//                       color: Colors.blue,
+//                     ),
+//                     onPressed: () =>
+//                         setState(() => isPreview = !isPreview),
+//                   )
+//                 ],
+//               ),
+//
+//               Row(
+//                 children: [
+//                   IconButton(
+//                       icon: const Icon(Icons.format_list_bulleted),
+//                       onPressed: addBullet),
+//                   IconButton(
+//                       icon: const Icon(Icons.title),
+//                       onPressed: addHeader),
+//                 ],
+//               ),
+//
+//               Container(
+//                 padding: const EdgeInsets.all(12),
+//                 decoration: BoxDecoration(
+//                   color: Colors.grey.shade100,
+//                   borderRadius: BorderRadius.circular(12),
+//                   border:
+//                   Border.all(color: Colors.grey.shade300),
+//                 ),
+//                 child: isPreview
+//                     ? MarkdownBody(
+//                   data: aboutController.text.isEmpty
+//                       ? "Nothing to preview"
+//                       : aboutController.text,
+//                 )
+//                     : TextFormField(
+//                   controller: aboutController,
+//                   maxLines: 8,
+//                   decoration: const InputDecoration(
+//                     border: InputBorder.none,
+//                     hintText: "Write About Us...",
+//                   ),
+//                 ),
+//               ),
+//
+//               const SizedBox(height: 30),
+//
+//               Center(
+//                 child: ElevatedButton(
+//                   onPressed: isSaving ? null : saveBasicInfo,
+//                   style: ElevatedButton.styleFrom(
+//                     backgroundColor:
+//                     const Color(0xFF00509D),
+//                     padding: const EdgeInsets.symmetric(
+//                         horizontal: 40, vertical: 14),
+//                   ),
+//                   child: isSaving
+//                       ? const CircularProgressIndicator(
+//                       color: Colors.white)
+//                       : const Text("Save Basic Info"),
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+//
+//   Widget _field(String label, TextEditingController controller) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         Text(label,
+//             style: const TextStyle(fontWeight: FontWeight.w600)),
+//         const SizedBox(height: 6),
+//         TextFormField(
+//           controller: controller,
+//           decoration: InputDecoration(
+//             filled: true,
+//             fillColor: Colors.grey.shade100,
+//             border: OutlineInputBorder(
+//               borderRadius: BorderRadius.circular(12),
+//               borderSide: BorderSide.none,
+//             ),
+//           ),
+//         ),
+//         const SizedBox(height: 16),
+//       ],
+//     );
+//   }
+// }

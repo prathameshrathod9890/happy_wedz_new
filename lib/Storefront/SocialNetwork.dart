@@ -13,6 +13,10 @@ class SocialNetworkPage extends StatefulWidget {
 class _SocialNetworkPageState extends State<SocialNetworkPage> {
   TextEditingController facebookController = TextEditingController();
   TextEditingController instagramController = TextEditingController();
+  TextEditingController pinterestController = TextEditingController();
+  TextEditingController twitterController = TextEditingController();
+  TextEditingController websiteController = TextEditingController();
+
   bool loading = false;
   bool saving = false;
 
@@ -35,9 +39,16 @@ class _SocialNetworkPageState extends State<SocialNetworkPage> {
     // Load links from SharedPreferences first
     final fbLink = prefs.getString('facebook_link');
     final instaLink = prefs.getString('instagram_link');
+    final pinterestLink = prefs.getString('pinterest_link');
+    final twitterLink = prefs.getString('twitter_link');
+    final websiteLink = prefs.getString('website_link');
 
     if (fbLink != null) facebookController.text = fbLink;
     if (instaLink != null) instagramController.text = instaLink;
+    if (pinterestLink != null) pinterestController.text = pinterestLink;
+    if (twitterLink != null) twitterController.text = twitterLink;
+    if (websiteLink != null) websiteController.text = websiteLink;
+
 
     print("📦 Loaded links from SharedPreferences: FB=$fbLink, IG=$instaLink");
 
@@ -62,11 +73,17 @@ class _SocialNetworkPageState extends State<SocialNetworkPage> {
 
         facebookController.text = data['facebook_link'] ?? '';
         instagramController.text = data['instagram_link'] ?? '';
+        pinterestController.text = data['pinterest_link'] ?? '';
+        twitterController.text = data['twitter_link'] ?? '';
+        websiteController.text = data['website_link'] ?? '';
 
         // Save fetched links locally
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('facebook_link', facebookController.text);
         await prefs.setString('instagram_link', instagramController.text);
+        await prefs.setString('pinterest_link', pinterestController.text);
+        await prefs.setString('twitter_link', twitterController.text);
+        await prefs.setString('website_link', websiteController.text);
 
         print("✅ Loaded links from API and saved locally.");
       } else {
@@ -91,6 +108,9 @@ class _SocialNetworkPageState extends State<SocialNetworkPage> {
     final requestBody = {
       "facebook_link": facebookController.text.trim(),
       "instagram_link": instagramController.text.trim(),
+      "pinterest_link": pinterestController.text.trim(),
+      "twitter_link": twitterController.text.trim(),
+      "website_link": websiteController.text.trim(),
     };
 
     try {
@@ -110,6 +130,10 @@ class _SocialNetworkPageState extends State<SocialNetworkPage> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('facebook_link', facebookController.text.trim());
         await prefs.setString('instagram_link', instagramController.text.trim());
+        await prefs.setString('pinterest_link', pinterestController.text.trim());
+        await prefs.setString('twitter_link', twitterController.text.trim());
+        await prefs.setString('website_link', websiteController.text.trim());
+
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Links saved successfully")),
@@ -230,6 +254,107 @@ class _SocialNetworkPageState extends State<SocialNetworkPage> {
               ],
             ),
             const SizedBox(height: 30),
+            // PINTEREST
+            const Text(
+              "Pinterest",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE60023),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.push_pin, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: pinterestController,
+                    decoration: InputDecoration(
+                      hintText: "https://www.pinterest.com/username",
+                      contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
+            // TWITTER
+            const Text(
+              "Twitter",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1DA1F2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.alternate_email, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: twitterController,
+                    decoration: InputDecoration(
+                      hintText: "https://www.twitter.com/username",
+                      contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
+            // WEBSITE
+            const Text(
+              "Website",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.web, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: websiteController,
+                    decoration: InputDecoration(
+                      hintText: "https://www.yourwebsite.com",
+                      contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
 
             // SAVE BUTTON
             ElevatedButton(

@@ -10,7 +10,6 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-
   // ✅ REQUIRED
   runApp(const MyApp());
 

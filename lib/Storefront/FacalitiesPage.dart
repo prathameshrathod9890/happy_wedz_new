@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_services/api_service_vendor.dart';
 
 class FacilitiesPage extends StatefulWidget {
   const FacilitiesPage({super.key});
@@ -31,6 +32,8 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
   int? serviceId;
   int? vendorSubcategoryId;
   String? token;
+  final VendorServiceApi _vendorApi = VendorServiceApi();
+
 
   final allowedIndoorOutdoor = ["Indoor", "Outdoor", "Both"];
   final allowedAlcohol = ["allowed", "not_allowed", "own_alcohol"];
@@ -104,39 +107,95 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
     alcoholPolicy = allowedAlcohol.contains(data['alcohol_policy']) ? data['alcohol_policy'] : null;
   }
 
+  // Future<void> _fetchExistingDataFromAPI() async {
+  //   setState(() => loading = true);
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
+  //       headers: {"Authorization": "Bearer $token"},
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       final data = jsonDecode(response.body);
+  //       final Map<String, dynamic> attributes = Map<String, dynamic>.from(data['attributes'] ?? {});
+  //
+  //       // Merge: Only overwrite fields if they are empty locally
+  //       final merged = {
+  //         "rooms": roomsController.text.isEmpty ? attributes['rooms'] : int.tryParse(roomsController.text),
+  //         "parking": parkingController.text.isEmpty ? attributes['parking'] : parkingController.text,
+  //         "catering_policy": cateringController.text.isEmpty ? attributes['catering_policy'] : cateringController.text,
+  //         "decor_policy": decorController.text.isEmpty ? attributes['decor_policy'] : decorController.text,
+  //         "offerings": offeringsController.text.isEmpty ? attributes['offerings'] : offeringsController.text,
+  //         "delivery_time": deliveryController.text.isEmpty ? attributes['delivery_time'] : deliveryController.text,
+  //         "travel_info": travelController.text.isEmpty ? attributes['travel_info'] : travelController.text,
+  //         "happywedz_since": happyWedzSinceController.text.isEmpty ? attributes['happywedz_since'] : happyWedzSinceController.text,
+  //         "area": areaController.text.isEmpty ? attributes['area'] : areaController.text,
+  //         "indoor_outdoor": indoorOutdoor ?? attributes['indoor_outdoor'],
+  //         "alcohol_policy": alcoholPolicy ?? attributes['alcohol_policy'],
+  //       };
+  //
+  //       _setFieldsFromMap(merged);
+  //       await _autosaveLocally(); // persist merged data
+  //     }
+  //   } catch (e) {
+  //     print("Error fetching facilities from API: $e");
+  //   }
+  //   setState(() => loading = false);
+  // }
+
   Future<void> _fetchExistingDataFromAPI() async {
     setState(() => loading = true);
+
     try {
-      final response = await http.get(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {"Authorization": "Bearer $token"},
+      final data = await _vendorApi.getByServiceId(
+        serviceId: serviceId!,
+        token: token!,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final Map<String, dynamic> attributes = Map<String, dynamic>.from(data['attributes'] ?? {});
+      if (data == null) return;
 
-        // Merge: Only overwrite fields if they are empty locally
-        final merged = {
-          "rooms": roomsController.text.isEmpty ? attributes['rooms'] : int.tryParse(roomsController.text),
-          "parking": parkingController.text.isEmpty ? attributes['parking'] : parkingController.text,
-          "catering_policy": cateringController.text.isEmpty ? attributes['catering_policy'] : cateringController.text,
-          "decor_policy": decorController.text.isEmpty ? attributes['decor_policy'] : decorController.text,
-          "offerings": offeringsController.text.isEmpty ? attributes['offerings'] : offeringsController.text,
-          "delivery_time": deliveryController.text.isEmpty ? attributes['delivery_time'] : deliveryController.text,
-          "travel_info": travelController.text.isEmpty ? attributes['travel_info'] : travelController.text,
-          "happywedz_since": happyWedzSinceController.text.isEmpty ? attributes['happywedz_since'] : happyWedzSinceController.text,
-          "area": areaController.text.isEmpty ? attributes['area'] : areaController.text,
-          "indoor_outdoor": indoorOutdoor ?? attributes['indoor_outdoor'],
-          "alcohol_policy": alcoholPolicy ?? attributes['alcohol_policy'],
-        };
+      final Map<String, dynamic> attributes =
+      Map<String, dynamic>.from(data['attributes'] ?? {});
 
-        _setFieldsFromMap(merged);
-        await _autosaveLocally(); // persist merged data
-      }
+      // ✅ Merge only if local fields empty
+      final merged = {
+        "rooms": roomsController.text.isEmpty
+            ? attributes['rooms']
+            : int.tryParse(roomsController.text),
+        "parking": parkingController.text.isEmpty
+            ? attributes['parking']
+            : parkingController.text,
+        "catering_policy": cateringController.text.isEmpty
+            ? attributes['catering_policy']
+            : cateringController.text,
+        "decor_policy": decorController.text.isEmpty
+            ? attributes['decor_policy']
+            : decorController.text,
+        "offerings": offeringsController.text.isEmpty
+            ? attributes['offerings']
+            : offeringsController.text,
+        "delivery_time": deliveryController.text.isEmpty
+            ? attributes['delivery_time']
+            : deliveryController.text,
+        "travel_info": travelController.text.isEmpty
+            ? attributes['travel_info']
+            : travelController.text,
+        "happywedz_since": happyWedzSinceController.text.isEmpty
+            ? attributes['happywedz_since']
+            : happyWedzSinceController.text,
+        "area": areaController.text.isEmpty
+            ? attributes['area']
+            : areaController.text,
+        "indoor_outdoor": indoorOutdoor ?? attributes['indoor_outdoor'],
+        "alcohol_policy": alcoholPolicy ?? attributes['alcohol_policy'],
+      };
+
+      _setFieldsFromMap(merged);
+      await _autosaveLocally();
     } catch (e) {
-      print("Error fetching facilities from API: $e");
+      debugPrint("❌ Facilities fetch error: $e");
     }
+
     setState(() => loading = false);
   }
 
@@ -172,6 +231,64 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
     await prefs.setString('facilitiesData_$vendorId', jsonEncode(data));
   }
 
+  // Future<void> _saveData() async {
+  //   if (vendorId == null || serviceId == null || token == null) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("Please complete Basic Info first.")),
+  //     );
+  //     return;
+  //   }
+  //
+  //   setState(() => saving = true);
+  //
+  //   final requestBody = {
+  //     "vendor_id": vendorId,
+  //     if (vendorSubcategoryId != null) "vendor_subcategory_id": vendorSubcategoryId,
+  //     "attributes": {
+  //       "rooms": int.tryParse(roomsController.text),
+  //       "parking": parkingController.text,
+  //       "catering_policy": cateringController.text,
+  //       "decor_policy": decorController.text,
+  //       "offerings": offeringsController.text,
+  //       "delivery_time": deliveryController.text,
+  //       "travel_info": travelController.text,
+  //       "happywedz_since": happyWedzSinceController.text,
+  //       "area": areaController.text,
+  //       "indoor_outdoor": indoorOutdoor,
+  //       "alcohol_policy": alcoholPolicy,
+  //     }
+  //   };
+  //
+  //   try {
+  //     final response = await http.put(
+  //       Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         "Authorization": "Bearer $token",
+  //       },
+  //       body: jsonEncode(requestBody),
+  //     );
+  //
+  //     if (response.statusCode == 200 || response.statusCode == 201) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text("Facilities details saved successfully.")),
+  //       );
+  //       await _autosaveLocally(); // save after API success
+  //     } else {
+  //       final data = jsonDecode(response.body);
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text(data["error"] ?? "Failed to save")),
+  //       );
+  //     }
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("Error saving facilities details")),
+  //     );
+  //   }
+  //
+  //   setState(() => saving = false);
+  // }
+
   Future<void> _saveData() async {
     if (vendorId == null || serviceId == null || token == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -182,53 +299,57 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
 
     setState(() => saving = true);
 
-    final requestBody = {
+    // 🔥 Fetch latest attributes again (SAFETY)
+    final latest = await _vendorApi.getByServiceId(
+      serviceId: serviceId!,
+      token: token!,
+    );
+
+    Map<String, dynamic> attributes =
+    Map<String, dynamic>.from(latest?["attributes"] ?? {});
+
+    // ✅ Update ONLY facilities-related fields
+    attributes.addAll({
+      "rooms": int.tryParse(roomsController.text),
+      "parking": parkingController.text,
+      "catering_policy": cateringController.text,
+      "decor_policy": decorController.text,
+      "offerings": offeringsController.text,
+      "delivery_time": deliveryController.text,
+      "travel_info": travelController.text,
+      "happywedz_since": happyWedzSinceController.text,
+      "area": areaController.text,
+      "indoor_outdoor": indoorOutdoor,
+      "alcohol_policy": alcoholPolicy,
+    });
+
+    final body = {
       "vendor_id": vendorId,
-      if (vendorSubcategoryId != null) "vendor_subcategory_id": vendorSubcategoryId,
-      "attributes": {
-        "rooms": int.tryParse(roomsController.text),
-        "parking": parkingController.text,
-        "catering_policy": cateringController.text,
-        "decor_policy": decorController.text,
-        "offerings": offeringsController.text,
-        "delivery_time": deliveryController.text,
-        "travel_info": travelController.text,
-        "happywedz_since": happyWedzSinceController.text,
-        "area": areaController.text,
-        "indoor_outdoor": indoorOutdoor,
-        "alcohol_policy": alcoholPolicy,
-      }
+      if (vendorSubcategoryId != null)
+        "vendor_subcategory_id": vendorSubcategoryId,
+      "attributes": attributes,
     };
 
-    try {
-      final response = await http.put(
-        Uri.parse("https://happywedz.com/api/vendor-services/$serviceId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(requestBody),
-      );
+    final success = await _vendorApi.updateService(
+      serviceId: serviceId!,
+      token: token!,
+      body: body,
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Facilities details saved successfully.")),
-        );
-        await _autosaveLocally(); // save after API success
-      } else {
-        final data = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data["error"] ?? "Failed to save")),
-        );
-      }
-    } catch (e) {
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error saving facilities details")),
+        const SnackBar(content: Text("Facilities details saved successfully")),
+      );
+      await _autosaveLocally();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to save facilities details")),
       );
     }
 
     setState(() => saving = false);
   }
+
 
   Widget _buildTextField(String title, TextEditingController controller, String hint,
       {int maxLines = 1}) {

@@ -227,20 +227,45 @@ class _VideoUploadPageState extends State<VideoUploadPage> {
                     aspectRatio: activeController!.value.aspectRatio,
                     child: VideoPlayer(activeController!),
                   )
-                      : thumb != null
-                      ? (url.contains("youtube")
+                      :
+                  // thumb != null
+                  //     ? (url.contains("youtube")
+                  //     ? Image.network(
+                  //   thumb,
+                  //   fit: BoxFit.cover,
+                  // )
+                  //     : Image.file(
+                  //   File(thumb),
+                  //   fit: BoxFit.cover,
+                  // ))
+                  //     : Center(
+                  //   child: Icon(Icons.play_arrow,
+                  //       size: 40, color: Colors.white),
+                  // ),
+                  thumb != null
+                      ? (thumb.startsWith("http")
                       ? Image.network(
                     thumb,
                     fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.play_circle,
+                      size: 40,
+                      color: Colors.white,
+                    ),
                   )
                       : Image.file(
                     File(thumb),
                     fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.play_circle,
+                      size: 40,
+                      color: Colors.white,
+                    ),
                   ))
-                      : Center(
-                    child: Icon(Icons.play_arrow,
-                        size: 40, color: Colors.white),
+                      : const Center(
+                    child: Icon(Icons.play_arrow, size: 40, color: Colors.white),
                   ),
+
                 ),
               ),
               Positioned(
@@ -313,27 +338,93 @@ class _VideoUploadPageState extends State<VideoUploadPage> {
                   ),
                 ),
                 SizedBox(width: 10),
+                // ElevatedButton(
+                //   onPressed: addVideoURL,
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Color(0xFF00509D),
+                //   ),
+                //   child: Text("Add"),
+                // )
                 ElevatedButton(
                   onPressed: addVideoURL,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF00509D),
+                    backgroundColor: const Color(0xFF00509D),
+                    foregroundColor: Colors.white, // 👈 text + icon color
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  child: Text("Add"),
-                )
+                  child: const Text(
+                    "+   Add",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+
               ],
             ),
             SizedBox(height: 20),
             buildVideoGrid(),
             SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: saving ? null : saveVideoGallery,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor:Color(0xFF00509D),
-                  padding: EdgeInsets.symmetric(vertical: 14)),
-              child: saving
-                  ? CircularProgressIndicator(color: Colors.white)
-                  : Text("Save Gallery"),
-            )
+
+            // ElevatedButton(
+            //     onPressed: saving ? null : saveVideoGallery,
+            //
+            //   style: ElevatedButton.styleFrom(
+            //     backgroundColor: const Color(0xFF00509D), // Steel Azure
+            //     elevation: 2,
+            //     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
+            //     shape: RoundedRectangleBorder(
+            //       borderRadius: BorderRadius.circular(30),
+            //     ),
+            //   ),
+            //   child: const Text(
+            //     "Save Gallery",
+            //     style: TextStyle(
+            //       color: Colors.white, // White text
+            //       fontSize: 16,
+            //       fontWeight: FontWeight.w500,
+            //     ),
+            //   ),
+            // )
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: saving ? null : saveVideoGallery,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00509D), // Steel Azure
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                child: saving
+                    ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : const Text(
+                  "Save Gallery",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
           ],
         ),
       ),
